@@ -1,0 +1,230 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ПРЕПОДАВАТЕЛИ ====================
+model Teacher {
+  id               Int       @id @default(autoincrement())
+  email            String    @unique
+  passwordHash     String    @map("password_hash")
+  fullName         String    @map("full_name")
+  position         String?
+  department       String?
+  academicDegree   String?   @map("academic_degree")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  
+  // Связи
+  students         Student[]
+  vkrApplications  VkrApplication[]
+  vkrTopics        VkrTopic[]
+  gradedTasks      VkrTask[]       @relation("GradedBy")
+  conferences      Conference[]
+  chatGroups       ChatGroup[]
+  sentMessages     Message[]       @relation("SenderTeacher")
+  forumQuestions   ForumQuestion[] @relation("AuthorTeacher")
+  forumAnswers     ForumAnswer[]   @relation("AuthorTeacherAnswer")
+
+  @@map("teachers")
+}
+
+// ==================== СТУДЕНТЫ ====================
+model Student {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  fullName      String    @map("full_name")
+  groupName     String?   @map("group_name")
+  course        Int?
+  degree        String?
+  gpa           Float?
+  teacherId     Int?      @map("teacher_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  
+  // Связи
+  teacher           Teacher?         @relation(fields: [teacherId], references: [id])
+  vkrApplication    VkrApplication?
+  vkrTopic          VkrTopic?
+  vkrTasks          VkrTask[]
+  groupMembers      GroupMember[]
+  sentMessages      Message[]        @relation("SenderStudent")
+  forumQuestions    ForumQuestion[]  @relation("AuthorStudent")
+  forumAnswers      ForumAnswer[]    @relation("AuthorStudentAnswer")
+
+  @@map("students")
+}
+
+// ==================== ЗАЯВКИ НА ВКР ====================
+model VkrApplication {
+  id             Int       @id @default(autoincrement())
+  studentId      Int       @unique @map("student_id")
+  teacherId      Int       @map("teacher_id")
+  proposedTopic  String?   @map("proposed_topic")
+  status         String    @default("pending")
+  rejectionReason String?  @map("rejection_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  
+  student Student @relation(fields: [studentId], references: [id])
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@map("vkr_applications")
+}
+
+// ==================== ТЕМЫ ВКР (утверждённые) ====================
+model VkrTopic {
+  id         Int       @id @default(autoincrement())
+  studentId  Int       @unique @map("student_id")
+  teacherId  Int       @map("teacher_id")
+  topic      String
+  approvedAt DateTime  @default(now()) @map("approved_at")
+  
+  student Student @relation(fields: [studentId], references: [id])
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@map("vkr_topics")
+}
+
+// ==================== ЗАДАНИЯ ВКР ====================
+model VkrTask {
+  id          Int       @id @default(autoincrement())
+  studentId   Int       @map("student_id")
+  taskIndex   Int       @map("task_index")
+  taskName    String?   @map("task_name")
+  description String?
+  deadline    DateTime?
+  status      String    @default("pending")
+  grade       Float?
+  feedback    String?
+  gradedById  Int?      @map("graded_by_id")
+  gradedAt    DateTime? @map("graded_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  student   Student   @relation(fields: [studentId], references: [id])
+  gradedBy  Teacher?  @relation("GradedBy", fields: [gradedById], references: [id])
+  files     TaskFile[]
+
+  @@map("vkr_tasks")
+}
+
+// ==================== ФАЙЛЫ ЗАДАНИЙ ====================
+model TaskFile {
+  id         Int       @id @default(autoincrement())
+  taskId     Int       @map("task_id")
+  fileName   String    @map("file_name")
+  fileUrl    String    @map("file_url")
+  uploadedAt DateTime  @default(now()) @map("uploaded_at")
+  
+  task VkrTask @relation(fields: [taskId], references: [id])
+
+  @@map("task_files")
+}
+
+// ==================== СООБЩЕНИЯ ЧАТА ====================
+model Message {
+  id           Int       @id @default(autoincrement())
+  senderType   String    @map("sender_type")
+  senderId     Int       @map("sender_id")
+  receiverId   Int?      @map("receiver_id")
+  groupId      Int?      @map("group_id")
+  text         String
+  edited       Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  
+  group        ChatGroup? @relation(fields: [groupId], references: [id])
+  senderTeacher Teacher?  @relation("SenderTeacher", fields: [senderId], references: [id])
+  senderStudent Student?  @relation("SenderStudent", fields: [senderId], references: [id])
+
+  @@map("messages")
+}
+
+// ==================== ГРУППЫ ЧАТОВ ====================
+model ChatGroup {
+  id        Int       @id @default(autoincrement())
+  teacherId Int       @map("teacher_id")
+  name      String
+  course    Int?
+  createdAt DateTime  @default(now()) @map("created_at")
+  
+  teacher  Teacher        @relation(fields: [teacherId], references: [id])
+  messages Message[]
+  members  GroupMember[]
+
+  @@map("chat_groups")
+}
+
+// ==================== УЧАСТНИКИ ГРУПП ====================
+model GroupMember {
+  groupId   Int @map("group_id")
+  studentId Int @map("student_id")
+  
+  group   ChatGroup @relation(fields: [groupId], references: [id])
+  student Student   @relation(fields: [studentId], references: [id])
+
+  @@id([groupId, studentId])
+  @@map("group_members")
+}
+
+// ==================== КОНФЕРЕНЦИИ ====================
+model Conference {
+  id            Int       @id @default(autoincrement())
+  teacherId     Int       @map("teacher_id")
+  title         String
+  description   String?
+  dateTime      DateTime  @map("date_time")
+  link          String
+  recordingLink String?   @map("recording_link")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@map("conferences")
+}
+
+// ==================== ФОРУМ (вопросы) ====================
+model ForumQuestion {
+  id         Int       @id @default(autoincrement())
+  authorType String    @map("author_type")
+  authorId   Int       @map("author_id")
+  question   String
+  createdAt  DateTime  @default(now()) @map("created_at")
+  
+  authorTeacher Teacher?        @relation("AuthorTeacher", fields: [authorId], references: [id])
+  authorStudent Student?        @relation("AuthorStudent", fields: [authorId], references: [id])
+  answers       ForumAnswer[]
+
+  @@map("forum_questions")
+}
+
+// ==================== ФОРУМ (ответы) ====================
+model ForumAnswer {
+  id         Int       @id @default(autoincrement())
+  questionId Int       @map("question_id")
+  authorType String    @map("author_type")
+  authorId   Int       @map("author_id")
+  answer     String
+  createdAt  DateTime  @default(now()) @map("created_at")
+  
+  question      ForumQuestion @relation(fields: [questionId], references: [id])
+  authorTeacher Teacher?      @relation("AuthorTeacherAnswer", fields: [authorId], references: [id])
+  authorStudent Student?      @relation("AuthorStudentAnswer", fields: [authorId], references: [id])
+
+  @@map("forum_answers")
+}
+
+// ==================== НОВОСТИ ====================
+model News {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  important   Boolean   @default(false)
+  tags        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("news")
+}

@@ -1,0 +1,6 @@
+﻿services:
+  - type: web
+    name: teacher-backend
+    env: node
+    buildCommand: npm install && npx prisma generate
+    startCommand: node src/server.js
